@@ -1,0 +1,6 @@
+main.exe
+*.obj
+
+output/*
+!output/placeholder
+
