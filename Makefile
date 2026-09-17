@@ -1,7 +1,22 @@
-FUNC := g++
-copt := -c 
+UNAME_S := $(shell uname -s)
+
+ifeq ($(UNAME_S),Darwin)
+	FUNC := clang++
+	OMP_PREFIX := $(shell brew --prefix libomp)
+	FLAGS := -O3 -g -Werror \
+		-Xpreprocessor -fopenmp \
+		-I$(OMP_PREFIX)/include \
+		-L$(OMP_PREFIX)/lib \
+		-Wl,-rpath,$(OMP_PREFIX)/lib \
+		-lomp \
+		-lm
+else
+	FUNC := g++
+	FLAGS := -O3 -g -Werror -fopenmp -lm
+endif
+
+copt := -c
 OBJ_DIR := ./bin/
-FLAGS := -O3 -lm -g -Werror -fopenmp
 
 CPP_FILES := $(wildcard src/*.cpp)
 OBJ_FILES := $(addprefix $(OBJ_DIR),$(notdir $(CPP_FILES:.cpp=.obj)))
