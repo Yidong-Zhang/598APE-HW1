@@ -42,9 +42,12 @@ double Triangle::getIntersection(Ray ray){
    double time = Plane::getIntersection(ray);
    if(time==inf) 
       return time;
-   Vector dist = solveScalers(right, up, vect, ray.point+ray.vector*time-center); 
-   unsigned char tmp = (thirdX - dist.x) * textureY + (thirdX-textureX) * (dist.y - textureY) < 0.0;
-   return((tmp!=(textureX * dist.y < 0.0)) || (tmp != (dist.x * textureY - thirdX * dist.y < 0.0)))?inf:time;
+   Vector p = ray.point+ray.vector*time-center;
+   double distX = p.x * right.x + p.y * right.y + p.z * right.z;
+   double distY = p.x * up.x + p.y * up.y + p.z * up.z;
+   
+   unsigned char tmp = (thirdX - distX) * textureY + (thirdX-textureX) * (distY - textureY) < 0.0;
+   return((tmp!=(textureX * distY < 0.0)) || (tmp != (distX * textureY - thirdX * distY < 0.0)))?inf:time;
 }
 
 bool Triangle::getLightIntersection(Ray ray, double* fill){

@@ -185,6 +185,182 @@ Optimization 1 changes only `src/shape.cpp::calcColor()`: the `times` allocation
 
 **Verification plan.** Rebuild with `make clean && make -j`, run the same four VM timing configurations, then use perf to confirm that execution remains dominated by rendering work rather than synchronization overhead.
 
+### Optimization 4: Simplify `solveScalers()` Using an Orthonormal Basis
+
+**Observation.** After Optimization 3, perf showed that `solveScalers()` remained one of the largest numerical hotspots in the Piano Room workload. In the profile collected before this change, `solveScalers()` accounted for approximately 23.74% of self CPU samples.
+
+**Source inspection.** Calls to `solveScalers()` consistently use `right`, `up`, and `vect` as the three basis vectors. These vectors are constructed from the object's orientation and form an orthonormal basis. The original implementation treated the problem as a general 3x3 linear system and used expanded determinant expressions followed by three divisions.
+
+**Change.** Replace the general linear-system solve in `src/vector.cpp` / `src/vector.h` with three direct projections onto the orthonormal basis:
+
+```cpp
+Vector solveScalers(
+    const Vector& v1,
+    const Vector& v2,
+    const Vector& v3,
+    const Vector& C
+){
+    return Vector(
+        C.x * v1.x + C.y * v1.y + C.z * v1.z,
+        C.x * v2.x + C.y * v2.y + C.z * v2.z,
+        C.x * v3.x + C.y * v3.y + C.z * v3.z
+    );
+}
+```
+
+The parameters are also passed by `const Vector&` rather than by value, avoiding unnecessary `Vector` copies.
+
+**Correctness (Piano Room).** The optimized Piano Room output was compared against the pre-change output at 500 x 500 resolution. ImageMagick reported an absolute pixel error count of `0 (0)`, indicating that the rendered images were pixel-identical.
+
+**Correctness (all scenes, re-verified).** Because `solveScalers()` is called from `src/box.cpp`, `src/disk.cpp`, `src/plane.cpp`, and `src/triangle.cpp`, correctness was re-checked across every workload, not only Piano Room. For each scene, the pre-change (`git stash`) and post-change binaries were built with identical `make clean && make -j` steps and run with the same command, and outputs were compared with SHA-256 and ImageMagick `compare -metric AE`:
+
+| Scene | Command | SHA-256 match | Absolute pixel error |
+| --- | --- | --- | --- |
+| Piano Room | `./main.exe -i inputs/pianoroom.ray --ppm -o piano.ppm -H 500 -W 500` | Identical | 0 (0) |
+| Sphere mesh (elephant) | `./main.exe -i inputs/elephant.ray --ppm -a inputs/elephant.animate --no-movie -F 1 -W 100 -H 100 -o sphere_f1.ppm` | Identical | 0 (0) |
+| Real Elephant | `./main.exe -i inputs/realelephant.ray --ppm -a inputs/elephant.animate --no-movie -F 1 -W 20 -H 20 -o realelephant.ppm` | Identical | 0 (0) |
+| Globe (frames 0-2) | `./main.exe -i inputs/globe.ray --ppm -a inputs/globe.animate --no-movie -F 3 -W 200 -H 200 -o globe.ppm` | Identical (all 3 frames) | 0 (0) each |
+
+All four scenes, including the triangle-mesh-heavy Sphere mesh and Real Elephant workloads and the plane/box/disk-heavy Piano Room and Globe scenes, produced byte-identical output before and after the change. This confirms the orthonormal-basis projection is algebraically equivalent to the original determinant-based solve for every call site, not just Piano Room.
+
+**Profiling result.** After the change, `solveScalers()` decreased from approximately 23.74% to 8.99% of self CPU samples on the Piano Room workload. The dominant hotspots shifted to `Box::getLightIntersection()`, `getLight()`, `Vector::dot()`, and `Box::getIntersection()`. Because perf percentages are relative shares of total sampled CPU time, overall effectiveness should be evaluated using the normal benchmark runtime in addition to the hotspot percentage.
+
+**Timing measurements.** Both the pre-change (Optimization 3) and post-change (Optimization 4) binaries were rebuilt with `make clean && make -j` and each configuration was run three times; the minimum observed value is reported, following the same rule used for the rest of the VM measurements. Globe used `--no-movie` so that the printed `Total time to create images` reflects rendering only, matching the Piano Room/Sphere/Real Elephant timers.
+
+| Scene | Command | Resolution | Frames | Opt3 (pre-change) min | Opt4 (post-change) min | Speedup vs. Opt3 |
+| --- | --- | --- | --- | --- | --- | --- |
+| Piano Room | `./main.exe -i inputs/pianoroom.ray --ppm -o piano.ppm -H 500 -W 500` | 500 x 500 | 1 | 0.240611 s | 0.196349 s | 1.23x |
+| Globe | `./main.exe -i inputs/globe.ray --ppm -a inputs/globe.animate --no-movie -F 24 -o globe.ppm` | 1000 x 1000 | 24 | 30.949570 s | 29.275831 s | 1.06x |
+| Sphere mesh | `./main.exe -i inputs/elephant.ray --ppm -a inputs/elephant.animate --no-movie -F 1 -W 100 -H 100 -o sphere_f1.ppm` | 100 x 100 | 1 | 0.432051 s | 0.305031 s | 1.42x |
+| Real Elephant | `./main.exe -i inputs/realelephant.ray --ppm -a inputs/elephant.animate --no-movie -F 1 -W 1 -H 1 -o realelephant_1x1.ppm` | 1 x 1 | 1 | 0.007740 s | 0.006715 s | 1.15x |
+
+**Optimization 4 conclusion.** The direct-projection form of `solveScalers()` improves every workload, with the largest relative gains on the triangle- and plane-heavy Sphere mesh (1.42x) and Piano Room (1.23x) scenes, where `solveScalers()` was previously a large share of self time. The Globe scene improves the least (1.06x), consistent with its profile being dominated by other work (`fix(double)`, `calcColor(...)`, `getLight(...)`, `ImageTexture::getColor(...)`) rather than `solveScalers(...)`. The Real Elephant 1x1 workload is too small for the timing difference to be fully reliable, but it moves in the same direction as the other scenes.
+
+### Optimization 5: Remove `solveScalers()` From `Triangle::getIntersection()`
+
+**Observation.** After Optimization 4, perf profiles of the Sphere mesh workload still showed `solveScalers()` as a large hotspot: `Triangle::getIntersection()` at 38.18% self time, `solveScalers()` at 15.82%, and `Plane::getIntersection()` at 13.95%.
+
+**Source inspection.** `Triangle::getIntersection(Ray)` called `solveScalers(right, up, vect, p)` and then used only `dist.x` and `dist.y` from the returned `Vector`; the `dist.z` projection onto `vect` was computed but never read. Since Optimization 4 made `solveScalers()` three independent dot products, the unused third projection was pure wasted work at this call site, along with the temporary `Vector` construction and return.
+
+**Change.** Replace the `solveScalers()` call in `src/triangle.cpp::Triangle::getIntersection(Ray)` with the two needed projections computed directly as scalars:
+
+```cpp
+double distX = p.x * right.x + p.y * right.y + p.z * right.z;
+double distY = p.x * up.x + p.y * up.y + p.z * up.z;
+```
+
+This drops the unused `vect` projection and avoids constructing/returning the temporary `Vector` that `solveScalers()` previously produced. `Triangle::getLightIntersection(Ray, double*)` still calls `solveScalers()` unchanged, since that path also needs `dist.x`/`dist.y` in the same pattern but was not the target of this change.
+
+**Correctness (Piano Room).** The optimized Piano Room output was compared against the pre-change output at 500 x 500 resolution:
+
+```
+cmp output/pianoroom_before_opt5.ppm output/pianoroom_after_opt5.ppm
+```
+
+produced no output, meaning the files were byte-identical. ImageMagick confirmed this:
+
+```
+compare -metric AE output/pianoroom_before_opt5.ppm output/pianoroom_after_opt5.ppm null:
+```
+
+returned `0 (0)`, meaning zero differing pixels.
+
+**Correctness (all four scenes, re-verified).** Because `Triangle::getIntersection()` is exercised by the mesh workloads and can also affect any scene containing triangles, correctness was re-checked across all four VM workloads, not only Piano Room. The pre-change (`git stash push -- src/triangle.cpp`) and post-change binaries were built with identical `make clean && make -j` steps and run with the same command, and outputs were compared with SHA-256 and ImageMagick `compare -metric AE`:
+
+| Scene | Command | SHA-256 match | Absolute pixel error |
+| --- | --- | --- | --- |
+| Piano Room | `./main.exe -i inputs/pianoroom.ray --ppm -o piano.ppm -H 500 -W 500` | Identical | 0 (0) |
+| Globe (frame 0) | `./main.exe -i inputs/globe.ray --ppm -a inputs/globe.animate --no-movie -F 24 -o globe.ppm` | Identical | 0 (0) |
+| Sphere mesh | `./main.exe -i inputs/elephant.ray --ppm -a inputs/elephant.animate --no-movie -F 1 -W 100 -H 100 -o sphere_f1.ppm` | Identical | 0 (0) |
+| Real Elephant | `./main.exe -i inputs/realelephant.ray --ppm -a inputs/elephant.animate --no-movie -F 1 -W 1 -H 1 -o realelephant_1x1.ppm` | Identical | 0 (0) |
+
+All four scenes produced byte-identical output before and after removing the `solveScalers()` call from `Triangle::getIntersection()`, confirming the direct `distX`/`distY` projection is algebraically equivalent to the removed call at every call site that exercises it, including the plane/box/disk-heavy Piano Room and Globe scenes (which contain few or no triangles, so this result also confirms the change does not affect non-triangle shapes).
+
+**Profiling result (Sphere mesh).** One profiled run before this change (rendering under `perf record`, so overhead is included) showed `Triangle::getIntersection()` at 38.18% self time, `solveScalers()` at 15.82%, `Plane::getIntersection()` at 13.95%, and a total profiled render time of 8.244190 s. One profiled run after this change showed `Triangle::getIntersection()` at 51.39%, `Plane::getIntersection()` at 14.17%, `Vector::operator+()` at 8.22%, `Vector::dot()` at 8.13%, `Vector::operator-()` at 6.61%, `solveScalers()` no longer appearing among the top functions, and a total profiled render time of 7.720043 s.
+
+The rise in `Triangle::getIntersection()`'s self-time share (38.18% -> 51.39%) does not by itself mean the function became slower: the work previously attributed separately to `solveScalers()` is now performed directly inside `Triangle::getIntersection()`, so those samples are now counted under its own symbol instead of a separate one. Because these are single `perf`-profiled runs with sampling overhead, the 8.244190 s vs. 7.720043 s render times are not a substitute for a repeated, non-`perf` benchmark and should not be presented as the final measured speedup.
+
+**Formal Sphere mesh benchmark (10 runs, no perf).** The post-Optimization-5 binary was run 10 times, without `perf`, using the formal 24-frame movie workload:
+
+```
+./main.exe -i inputs/elephant.ray --ppm -a inputs/elephant.animate --movie -F 24 -W 100 -H 100 -o output/sphere.mp4
+```
+
+| Run | Total time to create images |
+| --- | --- |
+| 1 | 7.208500 s |
+| 2 | 6.916225 s |
+| 3 | 6.963555 s |
+| 4 | 6.889785 s |
+| 5 | 6.918983 s |
+| 6 | 6.985793 s |
+| 7 | 6.853353 s |
+| 8 | 6.921991 s |
+| 9 | 6.893165 s |
+| 10 | 7.205468 s |
+
+| Metric | Value |
+| --- | --- |
+| Mean | 6.975682 s |
+| Median | 6.920487 s |
+| Sample Std. Dev. | 0.127384 s |
+| Minimum | 6.853353 s |
+| Maximum | 7.208500 s |
+
+No pre-Optimization-5 10-run measurement exists yet at this exact 24-frame movie configuration (the Optimization 4 timing table above used a reduced, `--no-movie`, 1-frame Sphere mesh configuration instead), so a formal Optimization 5 speedup is not calculated here. Compute it once the corresponding pre-Optimization-5 10-run measurement at this same command is collected.
+
+**Formal Sphere mesh benchmark, pre-Optimization-5 (10 runs, no perf).** The pre-change binary (rebuilt with only `src/triangle.cpp` reverted via `git stash push -- src/triangle.cpp`) was run 10 times on the same formal 24-frame movie workload:
+
+```
+./main.exe -i inputs/elephant.ray --ppm -a inputs/elephant.animate --movie -F 24 -W 100 -H 100 -o output/sphere.mp4
+```
+
+| Run | Total time to create images |
+| --- | --- |
+| 1 | 7.425176 s |
+| 2 | 7.419025 s |
+| 3 | 7.406554 s |
+| 4 | 7.376116 s |
+| 5 | 7.394312 s |
+| 6 | 7.332789 s |
+| 7 | 7.652859 s |
+| 8 | 7.503510 s |
+| 9 | 7.391918 s |
+| 10 | 7.438921 s |
+
+| Metric | Value |
+| --- | --- |
+| Mean | 7.434118 s |
+| Median | 7.412790 s |
+| Sample Std. Dev. | 0.088661 s |
+| Minimum | 7.332789 s |
+| Maximum | 7.652859 s |
+
+**Optimization 5 Sphere mesh speedup (formal 24-frame movie workload, mean-of-10 vs. mean-of-10):**
+
+```
+speedup = before_mean / after_mean = 7.434118 / 6.975682 = 1.07x
+```
+
+**Reduced four-scene timing comparison (n=3, matching Optimization 4's methodology).** To check whether the change affects the other three workloads, both binaries were also run 3 times each on the same reduced configurations used in the Optimization 4 timing table:
+
+| Scene | Command | Resolution | Frames | Pre-change min | Post-change min | Speedup |
+| --- | --- | --- | --- | --- | --- | --- |
+| Piano Room | `./main.exe -i inputs/pianoroom.ray --ppm -o piano.ppm -H 500 -W 500` | 500 x 500 | 1 | 0.194146 s | 0.193765 s | 1.00x |
+| Globe | `./main.exe -i inputs/globe.ray --ppm -a inputs/globe.animate --no-movie -F 24 -o globe.ppm` | 1000 x 1000 | 24 | 29.235203 s | 29.359180 s | 0.996x |
+| Sphere mesh reduced | `./main.exe -i inputs/elephant.ray --ppm -a inputs/elephant.animate --no-movie -F 1 -W 100 -H 100 -o sphere_f1.ppm` | 100 x 100 | 1 | 0.303564 s | 0.285275 s | 1.06x |
+| Real Elephant | `./main.exe -i inputs/realelephant.ray --ppm -a inputs/elephant.animate --no-movie -F 1 -W 1 -H 1 -o realelephant_1x1.ppm` | 1 x 1 | 1 | 0.006843 s | 0.006657 s | 1.03x |
+
+**Optimization 5 conclusion.** The only workload with a clear, reproducible improvement is the formal 24-frame Sphere mesh movie benchmark (1.07x, mean-of-10 vs. mean-of-10), which is dominated by `Triangle::getIntersection()` calls across thousands of triangles per ray. Piano Room and Globe show no meaningful change (within run-to-run noise, and one config is even slightly negative), which is expected because those two scenes contain few or no triangles, so removing work from `Triangle::getIntersection()` has little effect on them. The reduced 1-frame Sphere mesh and 1x1 Real Elephant configurations show modest, noisy improvements (1.06x and 1.03x) consistent with the same optimization but at a scale too small for a precise measurement; the formal 10-run Sphere mesh result above is the more reliable number for this optimization.
+
+**Development/correctness run (not part of the formal benchmark).** A separate, reduced one-frame render,
+
+```
+./main.exe -i inputs/elephant.ray --ppm -a inputs/elephant.animate --no-movie -F 1 -W 100 -H 100 -o sphere_f1.ppm
+```
+
+completed in `0.283196 s`. This run is used only for development/correctness checking (see the Optimization 4 correctness table, which uses this same reduced command) and is not part of the formal 24-frame Sphere mesh benchmark above.
+
 ## Baseline Results
 
 | Scene | Command | Resolution | Frames | Runtime | Notes |
