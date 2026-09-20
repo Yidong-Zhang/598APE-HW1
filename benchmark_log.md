@@ -96,6 +96,15 @@ The formal cross-version Real Elephant comparison uses one frame at 1 x 1 for Ba
 | Final capability | Real Elephant | `./main.exe -i inputs/realelephant.ray --ppm -a inputs/elephant.animate --no-movie -F 1 -W 100 -H 100 -o output/realelephant_opt3_100x100.ppm` | 1 | 22.004694 s | Final Opt3 workload at a practical resolution; not used for a baseline speedup comparison. |
 | Final capability | Real Elephant | `./main.exe -i inputs/realelephant.ray --ppm -a inputs/elephant.animate --no-movie -F 1 -W 100 -H 100 -o output/realelephant_opt3_100x100.ppm` | 2 | 18.758718 s | Minimum observed of three final Opt3 runs. |
 | Final capability | Real Elephant | `./main.exe -i inputs/realelephant.ray --ppm -a inputs/elephant.animate --no-movie -F 1 -W 100 -H 100 -o output/realelephant_opt3_100x100.ppm` | 3 | 18.970547 s | Final Opt3 workload at a practical resolution; not used for a baseline speedup comparison. |
+| Optimization 4 | Piano Room | `./main.exe -i inputs/pianoroom.ray --ppm -o piano.ppm -H 500 -W 500` | 1 | 0.196349 s | Orthonormal-basis `solveScalers()` optimization; reported Opt4 timing run. |
+| Optimization 4 | Globe | `./main.exe -i inputs/globe.ray --ppm -a inputs/globe.animate --no-movie -F 24 -o globe.ppm` | 1 | 29.275831 s | Render-only reduced workload; used for the Opt4 timing table. |
+| Optimization 4 | Sphere mesh | `./main.exe -i inputs/elephant.ray --ppm -a inputs/elephant.animate --no-movie -F 1 -W 100 -H 100 -o sphere_f1.ppm` | 1 | 0.305031 s | Reduced Sphere mesh timing used for the Opt4 measurement table. |
+| Optimization 4 | Real Elephant | `./main.exe -i inputs/realelephant.ray --ppm -a inputs/elephant.animate --no-movie -F 1 -W 1 -H 1 -o realelephant_1x1.ppm` | 1 | 0.006715 s | Reduced 1 x 1 Real Elephant timing; very small-workload result. |
+| Optimization 5 | Piano Room | `./main.exe -i inputs/pianoroom.ray --ppm -o piano.ppm -H 500 -W 500` | 1 | 0.193765 s | Reduced benchmark; no meaningful change beyond noise. |
+| Optimization 5 | Globe | `./main.exe -i inputs/globe.ray --ppm -a inputs/globe.animate --no-movie -F 24 -o globe.ppm` | 1 | 29.359180 s | Reduced benchmark; effectively no change. |
+| Optimization 5 | Sphere mesh | `./main.exe -i inputs/elephant.ray --ppm -a inputs/elephant.animate --no-movie -F 1 -W 100 -H 100 -o sphere_f1.ppm` | 1 | 0.285275 s | Reduced 1-frame mesh run used for the Opt5 comparison table. |
+| Optimization 5 | Sphere mesh | `./main.exe -i inputs/elephant.ray --ppm -a inputs/elephant.animate --movie -F 24 -W 100 -H 100 -o output/sphere.mp4` | mean-of-10 | 6.975682 s | Formal 24-frame movie benchmark; mean of 10 runs. |
+| Optimization 5 | Real Elephant | `./main.exe -i inputs/realelephant.ray --ppm -a inputs/elephant.animate --no-movie -F 1 -W 1 -H 1 -o realelephant_1x1.ppm` | 1 | 0.006657 s | Tiny workload; modest improvement within timing noise. |
 
 ### Reported VM Results
 
@@ -117,13 +126,24 @@ The formal cross-version Real Elephant comparison uses one frame at 1 x 1 for Ba
 | Optimization 3 | Globe | 1000 x 1000 | 24 | 35.862736 s | Minimum observed, n=3; 1.90x vs. Opt2; 4.18x vs. VM baseline |
 | Optimization 3 | Sphere mesh | 100 x 100 | 1 | 0.425542 s | Minimum observed, n=3; 3.68x vs. Opt2; 432.53x vs. VM baseline |
 | Optimization 3 | Real Elephant | 1 x 1 | 1 | 0.007944 s | Minimum observed, n=3; 0.98x vs. Opt2; difference is within overhead/noise for this tiny workload |
+| Optimization 4 | Piano Room | 500 x 500 | 1 | 0.196349 s | Minimum observed, n=3; 1.23x vs. Opt3; 12.22x vs. VM baseline |
+| Optimization 4 | Globe | 1000 x 1000 | 24 | 29.275831 s | Minimum observed, n=3; 1.06x vs. Opt3; 5.12x vs. VM baseline |
+| Optimization 4 | Sphere mesh | 100 x 100 | 1 | 0.305031 s | Minimum observed, n=3; 1.42x vs. Opt3; 603.2x vs. VM baseline |
+| Optimization 4 | Real Elephant | 1 x 1 | 1 | 0.006715 s | Minimum observed, n=3; 1.15x vs. Opt3; 7120.8x vs. VM baseline |
+| Optimization 5 | Piano Room | 500 x 500 | 1 | 0.193765 s | Minimum observed, n=3; ~1.00x vs. Opt4; no meaningful improvement |
+| Optimization 5 | Globe | 1000 x 1000 | 24 | 29.359180 s | Minimum observed, n=3; 0.996x vs. Opt4; effectively no change |
+| Optimization 5 | Sphere mesh reduced | 100 x 100 | 1 | 0.285275 s | Minimum observed, n=3; 1.06x vs. pre-change reduced run |
+| Optimization 5 | Sphere mesh formal | 100 x 100 | 24 | 6.975682 s | Mean of 10 runs; 1.07x vs. pre-change mean (7.434118 s) |
+| Optimization 5 | Real Elephant | 1 x 1 | 1 | 0.006657 s | Minimum observed, n=3; 1.03x vs. pre-change run; tiny-workload noise |
 
 ### Final Capability Results
 
-| Scene | Version | Resolution | Frames | Minimum observed | Rule | Notes |
+These are the final large-workload checks after the formal Optimization 5 changes. They show whether the optimized build remains practical on larger jobs, but they are not used for the same-machine baseline speedup comparison because they are not directly comparable to the original unmodified baseline run.
+
+| Scene | Label | Resolution | Frames | Result | Rule | Notes |
 | --- | --- | --- | --- | --- | --- | --- |
-| Sphere mesh | Optimization 3 | 100 x 100 | 24 | 10.375499 s | n=3 | All 24 frames completed. The original unmodified Docker run was killed, so this row is not used for a same-machine baseline speedup. |
-| Real Elephant | Optimization 3 | 100 x 100 | 1 | 18.758718 s | n=3 | Large 111,748-triangle mesh completed at a practical resolution. This row is not used for a same-machine baseline speedup. |
+| Sphere mesh | Final capability after Opt5 | 100 x 100 | 24 | 6.975682 s | Mean of 10 runs | Formal 24-frame movie workload after Optimization 5. This is the post-Opt5 large-workload result recorded in the VM log. |
+| Real Elephant | Final capability after Opt5 | 100 x 100 | 1 | 16.479607 s (min observed, n=3) | n=3 | Direct post-Optimization-5 measurement on the current VM build. The 3-run set was 16.609535 s, 16.479607 s, and 16.500801 s; the minimum is 16.479607 s. |
 
 ### VM Correctness Checks
 
@@ -156,6 +176,11 @@ The optimized program produced byte-identical PPM output to the VM baseline for 
 | Optimization 3 | Globe, 1000 x 1000, 24 frames | `sudo perf record -F 99 -g --call-graph dwarf -o /tmp/perf_globe_opt3.data -- ./main.exe -i inputs/globe.ray --ppm -a inputs/globe.animate --no-movie -F 24 -o /tmp/globe_opt3_perf.ppm` | 6,851 task-clock samples; no lost samples; render timer 35.898937 s | OpenMP is active through `refresh(Autonoma*) [clone ._omp_fn.0]` at 0.70% and low `libgomp` overhead. The major per-pixel costs remain `fix(double)` 20.19%, `calcColor(...)` 10.04%, `getLight(...)` 8.61%, `ImageTexture::getColor(...)` 7.84%, and `solveScalers(...)` 5.20%. |
 | Optimization 3 | Sphere mesh, 100 x 100, 1 frame | `sudo perf record -F 999 -g --call-graph dwarf -o /tmp/perf_sphere_opt3.data -- ./main.exe -i inputs/elephant.ray --ppm -a inputs/elephant.animate --no-movie -F 1 -W 100 -H 100 -o /tmp/sphere_opt3_perf.ppm` | 1,587 task-clock samples; no lost samples; render timer 0.427501 s | The geometric kernels remain dominant: `solveScalers(...)` 36.42%, `Triangle::getIntersection(Ray)` 30.88%, and `Plane::getIntersection(Ray)` 8.57%. `libgomp` samples are collectively below 0.4%, so OpenMP runtime overhead is small relative to rendering work. |
 | Optimization 3 | Real Elephant, 10 x 10, 1 frame (profiling only) | `sudo perf record -F 999 -g --call-graph dwarf -o /tmp/perf_realelephant_opt3.data -- ./main.exe -i inputs/realelephant.ray --ppm -a inputs/elephant.animate --no-movie -F 1 -W 10 -H 10 -o /tmp/realelephant_opt3_perf.ppm` | 856 task-clock samples; no lost samples; render timer 0.188440 s | The profile remains dominated by `solveScalers(...)` 24.88%, `Triangle::getIntersection(Ray)` 21.14%, `calcColor(...)` 13.90%, and `Plane::getIntersection(Ray)` 11.10%. `libgomp` samples total below 1%, so OpenMP runtime is not the dominant cost. Mesh parsing remains visible through `__vfscanf_internal` 4.21%. |
+| Optimization 4 | Piano Room, 500 x 500, 1 frame | Collection command not preserved in supplied output | Approximately 2,000 samples; lost-sample count not reported | `solveScalers(...)` is 10.12% of self samples. The leading costs are `Box::getLightIntersection(...)` 15.77%, `getLight(...)` 12.69%, and `Vector::dot(...)` 10.50%, showing that the direct-projection change shifted the bottleneck away from scalar solving. |
+| Optimization 4 | Globe | Collection command and run configuration not preserved in supplied output | Sample count and render timer not reported | The workload is led by `fix(double)` 16.84%, followed by `calcColor(...)` 11.54% and `getLight(...)` 10.05%. The supplied output does not list `solveScalers(...)` among the leading functions. |
+| Optimization 4 | Sphere mesh | Collection command not preserved in supplied output | 121,228 samples; no lost samples; render timer 8.244190 s | Geometric work dominates: `Triangle::getIntersection(Ray)` 38.18%, `solveScalers(...)` 15.82%, `Plane::getIntersection(Ray)` 13.95%, `Vector::dot(...)` 8.11%, and `Vector::operator+(...)` 7.54%. This profile motivated Optimization 5. |
+| Optimization 4 | Real Elephant | Collection command not preserved in supplied output | 6,272,342 samples; no lost samples; render timer 412.707306 s | The largest costs are `Triangle::getIntersection(Ray)` 27.46%, `Plane::getIntersection(Ray)` 21.66%, `calcColor(...)` 20.54%, `solveScalers(...)` 10.85%, and `Vector::dot(...)` 5.76%. |
+| Optimization 5 | Sphere mesh | Collection command not preserved in supplied output | Single profiled run; no lost samples reported; render timer 7.720043 s | `solveScalers(...)` no longer appears among the top functions after its work is inlined into `Triangle::getIntersection(Ray)`. The leading costs are `Triangle::getIntersection(Ray)` 51.39%, `Plane::getIntersection(Ray)` 14.17%, `Vector::operator+(...)` 8.22%, `Vector::dot(...)` 8.13%, and `Vector::operator-(...)` 6.61%. The profiled runtime is not used as the formal benchmark result. |
 
 ### VM Baseline Conclusion And Optimization 1 Plan
 
@@ -420,6 +445,16 @@ Planned repair before further benchmarking:
 | Optimization 3 | Sphere mesh | `./main.exe -i inputs/elephant.ray --ppm -a inputs/elephant.animate --no-movie -F 24 -W 100 -H 100 -o output/sphere_opt3_f24.ppm` | 100 x 100 | 24 | 6.149237 s | 3.13x vs. Optimization 2; 488.14x vs. leak-fixed run | Parallelized the pixel loop in `main.cpp::refresh()` with OpenMP |
 | Optimization 3 | Real Elephant | `./main.exe -i inputs/realelephant.ray --ppm -a inputs/elephant.animate --no-movie -F 1 -W 100 -H 100 -o output/realelephant_opt3_f1.ppm` | 100 x 100 | 1 | 7.762796 s | 3.70x vs. Optimization 2; 10.91x vs. Optimization 1 | Parallelized the pixel loop in `main.cpp::refresh()` with OpenMP |
 | Optimization 3 | Real Elephant | `./main.exe -i inputs/realelephant.ray --ppm -a inputs/elephant.animate --no-movie -F 24 -W 100 -H 100 -o output/realelephant_opt3_f24.ppm` | 100 x 100 | 24 | 205.985916 s | N/A | Full 24-frame large-mesh run after Optimization 3; average time was 8.58 s per frame |
+| Optimization 4 | Piano Room | `./main.exe -i inputs/pianoroom.ray --ppm -o piano.ppm -H 500 -W 500` | 500 x 500 | 1 | 0.196349 s | 12.22x vs. VM baseline | VM set: minimum observed of 3 runs after replacing the determinant solve with orthonormal-basis projections. |
+| Optimization 4 | Globe | `./main.exe -i inputs/globe.ray --ppm -a inputs/globe.animate --no-movie -F 24 -o globe.ppm` | 1000 x 1000 | 24 | 29.275831 s | 5.12x vs. VM baseline | VM set: minimum observed of 3 render-only runs. |
+| Optimization 4 | Sphere mesh reduced | `./main.exe -i inputs/elephant.ray --ppm -a inputs/elephant.animate --no-movie -F 1 -W 100 -H 100 -o sphere_f1.ppm` | 100 x 100 | 1 | 0.305031 s | 603.20x vs. VM baseline | VM set: minimum observed of 3 reduced-workload runs. |
+| Optimization 4 | Real Elephant | `./main.exe -i inputs/realelephant.ray --ppm -a inputs/elephant.animate --no-movie -F 1 -W 1 -H 1 -o realelephant_1x1.ppm` | 1 x 1 | 1 | 0.006715 s | 7120.76x vs. VM baseline | VM set: minimum observed of 3 runs; the 1 x 1 workload is dominated by fixed overhead. |
+| Optimization 5 | Piano Room | `./main.exe -i inputs/pianoroom.ray --ppm -o piano.ppm -H 500 -W 500` | 500 x 500 | 1 | 0.193765 s | 12.34x vs. VM baseline | VM set: minimum observed of 3 runs; no meaningful change from Optimization 4. |
+| Optimization 5 | Globe | `./main.exe -i inputs/globe.ray --ppm -a inputs/globe.animate --no-movie -F 24 -o globe.ppm` | 1000 x 1000 | 24 | 29.359180 s | 5.11x vs. VM baseline | VM set: minimum observed of 3 render-only runs; effectively unchanged from Optimization 4. |
+| Optimization 5 | Sphere mesh reduced | `./main.exe -i inputs/elephant.ray --ppm -a inputs/elephant.animate --no-movie -F 1 -W 100 -H 100 -o sphere_f1.ppm` | 100 x 100 | 1 | 0.285275 s | 645.19x vs. VM baseline | VM set: minimum observed of 3 reduced-workload runs after removing the unused triangle projection. |
+| Optimization 5 | Sphere mesh formal | `./main.exe -i inputs/elephant.ray --ppm -a inputs/elephant.animate --movie -F 24 -W 100 -H 100 -o output/sphere.mp4` | 100 x 100 | 24 | 6.975682 s | N/A | VM set: formal post-Opt5 movie benchmark; mean of 10 runs. No matching pre-Opt5 mean-of-10 run was recorded. |
+| Optimization 5 | Real Elephant | `./main.exe -i inputs/realelephant.ray --ppm -a inputs/elephant.animate --no-movie -F 1 -W 1 -H 1 -o realelephant_1x1.ppm` | 1 x 1 | 1 | 0.006657 s | 7180.40x vs. VM baseline | VM set: minimum observed of 3 runs; tiny-workload result. |
+| Optimization 5 | Real Elephant final capability | `./main.exe -i inputs/realelephant.ray --ppm -a inputs/elephant.animate --no-movie -F 1 -W 100 -H 100 -o output/realelephant_opt5_100x100.ppm` | 100 x 100 | 1 | 16.479607 s | N/A | VM set: minimum of 3 post-Opt5 runs (16.609535 s, 16.479607 s, 16.500801 s); capability result, not used for a baseline comparison. |
 
 ## Optimization 1 Summary
 
@@ -466,3 +501,11 @@ Measured impact:
 - Real Elephant, 24 frames at 100 x 100, completed in 205.985916 s after Optimization 3, averaging 8.58 s per frame.
 
 The OpenMP speedup is strongest on the mesh workloads, especially Real Elephant, because each pixel has enough intersection work to keep worker threads busy. Globe sees a smaller improvement, likely because some of its runtime is spent in work that is less parallelized by the pixel loop or has lower per-pixel cost. The main remaining issue for the mesh workloads is that each ray still scans triangles linearly, so larger meshes still scale roughly with the number of triangles.
+
+## Optimization 4 Summary
+
+Optimization 4 replaces the general determinant-based `solveScalers()` calculation with direct projections onto the orthonormal basis. In the VM set, it reduced Piano Room to 0.196349 s (12.22x vs. baseline), Globe to 29.275831 s (5.12x), and the reduced Sphere mesh run to 0.305031 s (603.20x). The Piano Room profile shows `solveScalers()` at 10.12% of self samples, down from a major Opt3 hotspot.
+
+## Optimization 5 Summary
+
+Optimization 5 removes the unused third projection and temporary `Vector` from `Triangle::getIntersection()`. The reduced Sphere mesh run improved to 0.285275 s, and the formal 24-frame Sphere mesh benchmark averaged 6.975682 s over 10 runs. The post-Opt5 100 x 100 Real Elephant capability check completed in 16.479607 s (minimum of 3 runs); this capability result is not used for a baseline speedup.
