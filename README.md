@@ -60,14 +60,19 @@ This rebuilds `src/*.obj` (via `src/Makefile`) and links `main.exe` at the top l
 Each block below checks out the commit for that stage, rebuilds, and regenerates output images for all four workloads. Run `git checkout main` (or your working branch) afterward to return to the latest code.
 
 **Baseline** (commit `19bbc81`):
+
+Commit `19bbc81` predates the addition of `inputs/realelephant.ray`, so that file does not exist in this checkout. `inputs/realelephant.ray` is only a workload/scene-description file (it points the existing raytracer at the larger 111,748-triangle mesh) — it contains no optimized raytracer source code, so supplying it separately does not change the baseline implementation in any way. Preserve it from `main` before checking out the baseline, using the repository's actual branch (`main`):
 ```bash
+git show main:inputs/realelephant.ray > /tmp/realelephant.ray
 git checkout 19bbc81
+cp /tmp/realelephant.ray inputs/realelephant.ray
 make clean && make -j
 ./main.exe -i inputs/pianoroom.ray --ppm -o output/baseline_pianoroom.ppm -H 500 -W 500
 ./main.exe -i inputs/globe.ray --ppm -a inputs/globe.animate --movie -F 24 -o output/baseline_globe.mp4
 ./main.exe -i inputs/elephant.ray --ppm -a inputs/elephant.animate --no-movie -F 1 -W 100 -H 100 -o output/baseline_sphere_f1.ppm
 ./main.exe -i inputs/realelephant.ray --ppm -a inputs/elephant.animate --no-movie -F 1 -W 1 -H 1 -o output/baseline_realelephant_1x1.ppm
 ```
+Copying `realelephant.ray` into the baseline checkout only changes the benchmark input available on disk; it does not modify or add to the baseline source code, which remains exactly commit `19bbc81`.
 
 **Optimization 1, 2, and 3** (nearest-hit scan, `-O3`, OpenMP pixel loop — bundled in commit `b6c8b44`):
 ```bash
@@ -107,6 +112,8 @@ The optimizations were implemented incrementally and committed to this repositor
 | Opt5 | Remove the unused third projection from `Triangle::getIntersection()` | `src/triangle.cpp` | `c3295ce` |
 
 **Note on commit granularity:** Opt1, Opt2, and Opt3 were all introduced together in a single commit (`b6c8b44`, "Optimize raytracer benchmarks"); there is no earlier commit in this repository's history containing only the nearest-hit scan, or only the `-O3` flag change, or only the OpenMP pragma, in isolation. Similarly, Opt4 and Opt5 were introduced together in a single commit (`c3295ce`, "Optimization 4-5: solveScalers orthonormal projection, triangle intersection projection reduction"). Commit `02d7ade` ("Optimize ray calculations and support macOS OpenMP build") sits between these and adds macOS OpenMP build support plus a minor reordering/caching change in `src/shape.cpp` and `src/box.cpp`; it is not one of the five documented optimizations but is part of the reproducible history. Commits `a563ac5` and `fbe1bd4` only update `benchmark_log.md` and contain no source changes.
+
+**Note on the Real Elephant workload file:** `inputs/realelephant.ray` was introduced in commit `b6c8b44`, after the `19bbc81` baseline commit. It must therefore be supplied separately (see the Baseline block above) when reproducing the baseline large-mesh Real Elephant test.
 
 ### Benchmark Commands
 
