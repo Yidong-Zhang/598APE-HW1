@@ -55,6 +55,44 @@ make -j
 ```
 This rebuilds `src/*.obj` (via `src/Makefile`) and links `main.exe` at the top level using the flags described above.
 
+### Reproducing Outputs by Version
+
+Each block below checks out the commit for that stage, rebuilds, and regenerates output images for all four workloads. Run `git checkout main` (or your working branch) afterward to return to the latest code.
+
+**Baseline** (commit `19bbc81`):
+```bash
+git checkout 19bbc81
+make clean && make -j
+./main.exe -i inputs/pianoroom.ray --ppm -o output/baseline_pianoroom.ppm -H 500 -W 500
+./main.exe -i inputs/globe.ray --ppm -a inputs/globe.animate --movie -F 24 -o output/baseline_globe.mp4
+./main.exe -i inputs/elephant.ray --ppm -a inputs/elephant.animate --no-movie -F 1 -W 100 -H 100 -o output/baseline_sphere_f1.ppm
+./main.exe -i inputs/realelephant.ray --ppm -a inputs/elephant.animate --no-movie -F 1 -W 1 -H 1 -o output/baseline_realelephant_1x1.ppm
+```
+
+**Optimization 1, 2, and 3** (nearest-hit scan, `-O3`, OpenMP pixel loop — bundled in commit `b6c8b44`):
+```bash
+git checkout b6c8b44
+make clean && make -j
+./main.exe -i inputs/pianoroom.ray --ppm -o output/opt123_pianoroom.ppm -H 500 -W 500
+./main.exe -i inputs/globe.ray --ppm -a inputs/globe.animate --movie -F 24 -o output/opt123_globe.mp4
+./main.exe -i inputs/elephant.ray --ppm -a inputs/elephant.animate --no-movie -F 1 -W 100 -H 100 -o output/opt123_sphere_f1.ppm
+./main.exe -i inputs/realelephant.ray --ppm -a inputs/elephant.animate --no-movie -F 1 -W 1 -H 1 -o output/opt123_realelephant_1x1.ppm
+```
+
+**Optimization 4 and 5** (orthonormal-basis `solveScalers()`, unused triangle projection removed — bundled in commit `c3295ce`):
+```bash
+git checkout c3295ce
+make clean && make -j
+./main.exe -i inputs/pianoroom.ray --ppm -o output/opt45_pianoroom.ppm -H 500 -W 500
+./main.exe -i inputs/globe.ray --ppm -a inputs/globe.animate --movie -F 24 -o output/opt45_globe.mp4
+./main.exe -i inputs/elephant.ray --ppm -a inputs/elephant.animate --no-movie -F 1 -W 100 -H 100 -o output/opt45_sphere_f1.ppm
+./main.exe -i inputs/elephant.ray --ppm -a inputs/elephant.animate --movie -F 24 -W 100 -H 100 -o output/opt45_sphere.mp4
+./main.exe -i inputs/realelephant.ray --ppm -a inputs/elephant.animate --no-movie -F 1 -W 1 -H 1 -o output/opt45_realelephant_1x1.ppm
+```
+
+As noted above, `b6c8b44` bundles Opt1/Opt2/Opt3 together and `c3295ce` bundles Opt4/Opt5 together; there is no separate commit/command set for each optimization in isolation.
+
+
 ### Optimization Versions
 
 The optimizations were implemented incrementally and committed to this repository's git history. **The individual optimizations below are not all isolated into single, separately buildable commits** — some are bundled together in the same commit. Commit hashes are taken directly from `git log --oneline` on this repository; the closest reproducible commit/state is identified where a clean isolated commit does not exist.
