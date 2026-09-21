@@ -97,6 +97,11 @@ make clean && make -j
 
 As noted above, `b6c8b44` bundles Opt1/Opt2/Opt3 together and `c3295ce` bundles Opt4/Opt5 together; there is no separate commit/command set for each optimization in isolation.
 
+### Baseline Memory Diagnosis
+
+Baseline configuration was constrained by a preliminary memory diagnosis. In Docker, the original 24-frame Sphere mesh run at 100x100 was terminated after frame 8 while resident memory grew from approximately 45 MB to 3.58 GB. Source inspection identified an allocation on every ray in `calcColor()`; on the skybox return path, the allocated intersection array was not released. The final nearest-hit implementation in Optimization 1 removes this allocation entirely, thereby removing both the leak and the repeated allocation/copy/sort overhead.
+
+For same-machine VM comparisons, we therefore used one 100x100 Sphere frame. The original Real Elephant baseline did not complete a 10x10 frame within several minutes, so cross-version Real Elephant timings use one 1x1 frame. These reduced configurations are used only for fair baseline comparisons. We separately report final-capability runs: the optimized renderer completes the 24-frame Sphere workload at 100x100 and one 100x100 Real Elephant frame.
 
 ### Optimization Versions
 
